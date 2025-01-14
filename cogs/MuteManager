@@ -1,0 +1,71 @@
+import discord
+from discord.ext import commands
+import asyncio
+
+class MuteManager(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    async def get_or_create_mute_role(self, guild):
+        role = discord.utils.get(guild.roles, name="Muted")
+        if role:
+            return role
+        
+        # Créer le rôle "Muted"
+        role = await guild.create_role(name="Muted", permissions=discord.Permissions(send_messages=False, speak=False))
+        
+        # Appliquer ce rôle à tous les salons existants
+        for channel in guild.channels:
+            await channel.set_permissions(role, send_messages=False, speak=False)
+        
+        return role
+
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def mute(self, ctx, member: discord.Member, *, reason=None):
+        role = await self.get_or_create_mute_role(ctx.guild)
+        
+        if role in member.roles:
+            await ctx.send(embed=discord.Embed(title="Erreur", description=f"{member.mention} est déjà mute.", color=discord.Color.red()))
+            return
+
+        await member.add_roles(role, reason=reason)
+        await ctx.send(embed=discord.Embed(title="Muté", description=f"{member.mention} a été mute.", color=discord.Color.green()))
+
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def unmute(self, ctx, member: discord.Member):
+        role = discord.utils.get(ctx.guild.roles, name="Muted")
+        if not role:
+            await ctx.send(embed=discord.Embed(title="Erreur", description="Le rôle Muted n'existe pas.", color=discord.Color.red()))
+            return
+
+        if role not in member.roles:
+            await ctx.send(embed=discord.Embed(title="Erreur", description=f"{member.mention} n'est pas mute.", color=discord.Color.red()))
+            return
+
+        await member.remove_roles(role)
+        await ctx.send(embed=discord.Embed(title="Démute", description=f"{member.mention} a été démute.", color=discord.Color.green()))
+
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def tempmute(self, ctx, member: discord.Member, duration: int, *, reason=None):
+        role = await self.get_or_create_mute_role(ctx.guild)
+        
+        if role in member.roles:
+            await ctx.send(embed=discord.Embed(title="Erreur", description=f"{member.mention} est déjà mute.", color=discord.Color.red()))
+            return
+        
+        await member.add_roles(role, reason=reason)
+        await ctx.send(embed=discord.Embed(title="Muté Temporairement", description=f"{member.mention} a été mute pour {duration} minutes.", color=discord.Color.green()))
+
+        # Délai pour rétablir les permissions
+        await asyncio.sleep(duration * 60)
+        
+        if role in member.roles:
+            await member.remove_roles(role)
+            await ctx.send(embed=discord.Embed(title="Démute", description=f"{member.mention} a été démute après {duration} minutes.", color=discord.Color.green()))
+
+async def setup(bot):
+    print("Extension MuteManager chargée")
+    await bot.add_cog(MuteManager(bot))
